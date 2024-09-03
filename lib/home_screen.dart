@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
+import 'package:open_route_service/open_route_service.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -18,6 +19,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<LatLng> routePoints = [];
   List<String> destinationSuggestions = [];
   bool showSuggestions = false;
+
+  final OpenRouteService client = OpenRouteService(apiKey: '5b3ce3597851110001cf624831003f4bc35c47fa8d6c2b66260fc127'); // Replace with your OpenRouteService API key
 
   @override
   void initState() {
@@ -86,7 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
           await getRoute(LatLng(lat, lon)); // Call getRoute asynchronously
           setState(() {
             showSuggestions =
-                false; // Hide suggestions after selecting destination
+            false; // Hide suggestions after selecting destination
           });
         } else {
           showErrorMessage('Destination not found.');
@@ -104,42 +107,23 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> getRoute(LatLng destination) async {
     if (currentLocation == null) return;
 
-    final routeUrl =
-        'https://api.openrouteservice.org/v2/directions/driving-car';
-    final body = json.encode({
-      'coordinates': [
-        [currentLocation!.longitude, currentLocation!.latitude],
-        [destination.longitude, destination.latitude],
-      ],
-    });
-
     try {
-      final response = await http.post(
-        Uri.parse(routeUrl),
-        headers: {
-          'Authorization':
-              '5b3ce3597851110001cf624831003f4bc35c47fa8d6c2b66260fc127', // Replace with your OpenRouteService API key
-          'Content-Type': 'application/json',
-          'User-Agent': 'MOVE TRAFFIC APP', // Replace with your app name
-        },
-        body: body,
+      // Define your start and end coordinates
+      final coordinates = [
+        ORSCoordinate(latitude: currentLocation!.latitude!, longitude: currentLocation!.longitude!),
+        ORSCoordinate(latitude: destination.latitude, longitude: destination.longitude),
+      ];
+
+      // Get the route
+      final route = await client.directionsRouteCoordsGet(
+        startCoordinate: coordinates[0],
+        endCoordinate: coordinates[1],
       );
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        if (data.containsKey('features') && data['features'].isNotEmpty) {
-          final List<dynamic> coordinates =
-              data['features'][0]['geometry']['coordinates'];
-          setState(() {
-            routePoints =
-                coordinates.map((coord) => LatLng(coord[1], coord[0])).toList();
-          });
-        } else {
-          showErrorMessage('Route data not found.');
-        }
-      } else {
-        showErrorMessage('Failed to get route. Please try again later.');
-      }
+      setState(() {
+        routePoints = route.map((coord) => LatLng(coord.latitude, coord.longitude)).toList();
+      });
+
     } catch (e) {
       print('Error getting route: $e');
       showErrorMessage('Failed to get route. Please try again later.');
@@ -204,15 +188,15 @@ class _HomeScreenState extends State<HomeScreen> {
               options: MapOptions(
                 center: currentLocation != null
                     ? LatLng(
-                        currentLocation!.latitude!, currentLocation!.longitude!)
-                    : LatLng(37.7749, -122.4194),
+                    currentLocation!.latitude!, currentLocation!.longitude!)
+                    : LatLng(37.7749, -122.4194), // Default to San Francisco if location is null
                 zoom: 14.0,
                 maxZoom: 18.0,
               ),
               children: [
                 TileLayer(
                   urlTemplate:
-                      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                   subdomains: ['a', 'b', 'c'],
                 ),
                 if (currentLocation != null)
